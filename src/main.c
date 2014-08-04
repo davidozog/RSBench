@@ -97,13 +97,15 @@ int main(int argc, char * argv[])
 	double E;
 	int i;
 
-	#pragma omp parallel default(none) \
+	#pragma omp parallel default(none) num_threads(4) \
 	private(seed, mat, E, i) \
 	shared(input, data) 
 	{
 		double macro_xs[4];
 		int thread = omp_get_thread_num();
 		seed += thread;
+
+//    printf("1 - nthreads:%d\n", omp_get_num_threads());
 		
 		#ifdef PAPI
 		int eventset = PAPI_NULL; 
@@ -116,9 +118,10 @@ int main(int argc, char * argv[])
 		complex double * sigTfactors =
 			(complex double *) malloc( input.numL * sizeof(complex double) );
 
-		#pragma omp for schedule(dynamic)
+    #pragma omp for schedule(dynamic)
 		for( i = 0; i < input.lookups; i++ )
 		{
+//      printf("2 - nthreads:%d\n", omp_get_num_threads());
 			#ifdef STATUS
 			if( thread == 0 && i % 1000 == 0 )
 				printf("\rCalculating XS's... (%.0lf%% completed)",

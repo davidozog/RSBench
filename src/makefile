@@ -39,6 +39,7 @@ endif
 
 ifeq ($(COMPILER),intel)
   CC = icc
+  #CFLAGS += -openmp -mmic -vec-report=3 -no-opt-prefetch
   CFLAGS += -openmp -mmic -vec-report=3
 endif
 

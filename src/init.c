@@ -97,6 +97,7 @@ Window ** generate_window_params( Input input, int * n_windows, int * n_poles )
 	{
 		int space = n_poles[i] / n_windows[i];
 		int ctr = 0;
+    //printf("space:%d\n", space);
 		for( int j = 0; j < n_windows[i]; j++ )
 		{
 			R[i][j].T = (double) rand() / RAND_MAX;
