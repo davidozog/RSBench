@@ -45,12 +45,31 @@ int * generate_n_windows( Input input )
 	return R;
 }
 
-// 
+MIC_Pole generate_mypoles( Input input, int * n_poles )
+{
+  complex double *mp_eas = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_rts = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_ras = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_rfs = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  short int *l_vals = (short int *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(short int), 64);
+
+  MIC_Pole mpole;
+  mpole.MP_EA = mp_eas;
+  mpole.MP_RT = mp_rts;
+  mpole.MP_RA = mp_ras;
+  mpole.MP_RF = mp_rfs;
+  mpole.l_value = l_vals;
+
+  //printf("here\n");
+
+  return mpole;
+}
+
 Pole ** generate_poles( Input input, int * n_poles )
 {
 	// Allocating 2D contiguous matrix
-	Pole ** R = (Pole **) malloc( input.n_nuclides * sizeof( Pole *));
-	Pole * contiguous = (Pole *) malloc( input.n_nuclides * input.avg_n_poles * sizeof(Pole));
+	Pole ** R = (Pole **)_mm_malloc( input.n_nuclides * sizeof( Pole *), 64);
+	Pole * contiguous = (Pole *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(Pole), 64);
 
 	int k = 0;
 	for( int i = 0; i < input.n_nuclides; i++ )
@@ -121,4 +140,20 @@ double ** generate_pseudo_K0RS( Input input )
 		R[i] = &contiguous[i*input.numL];
 
 	return R;
+}
+
+void cleanup(int *n_poles, int *n_windows, Input input, CalcDataPtrs data) {
+  free(n_poles);
+  free(n_windows);
+  _mm_free(data.poles);
+  _mm_free(data.mypoles->MP_EA);
+  _mm_free(data.mypoles->MP_RT);
+  _mm_free(data.mypoles->MP_RA);
+  _mm_free(data.mypoles->MP_RF);
+  _mm_free(data.mypoles->l_value);
+  free(data.materials.num_nucs);
+  free(data.materials.mats);
+  free(data.materials.concs);
+  free(data.windows);
+  free(data.pseudo_K0RS);
 }

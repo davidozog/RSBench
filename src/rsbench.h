@@ -40,6 +40,14 @@ typedef struct{
 } Pole;
 
 typedef struct{
+	complex double *MP_EA;
+	complex double *MP_RT;
+	complex double *MP_RA;
+	complex double *MP_RF;
+	short int *l_value;
+} MIC_Pole;
+
+typedef struct{
 	double T;
 	double A;
 	double F;
@@ -52,6 +60,7 @@ typedef struct{
 	int * n_windows;
 	Materials materials;
 	Pole ** poles;
+  MIC_Pole * mypoles;
 	Window ** windows;
 	double ** pseudo_K0RS;
 } CalcDataPtrs;
@@ -70,8 +79,10 @@ void print_input_summary(Input input);
 int * generate_n_poles( Input input );
 int * generate_n_windows( Input input );
 Pole ** generate_poles( Input input, int * n_poles );
+MIC_Pole generate_mypoles( Input input, int * n_poles );
 Window ** generate_window_params( Input input, int * n_windows, int * n_poles );
 double ** generate_pseudo_K0RS( Input input );
+void cleanup(int *n_poles, int *n_windows, Input input, CalcDataPtrs data);
 
 // material.c
 int * load_num_nucs(Input input);
@@ -83,6 +94,7 @@ Materials get_materials(Input input);
 // utils.c
 double rn(unsigned long * seed);
 size_t get_mem_estimate( Input input );
+unsigned int hash(unsigned char *str, int nbins);
 
 // xs_kernel.c
 void calculate_macro_xs( double * macro_xs, int mat, double E, Input input, CalcDataPtrs data, complex double * sigTfactors ); 

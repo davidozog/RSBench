@@ -2,12 +2,13 @@
 # User Options
 #===============================================================================
 
-COMPILER  = gnu
+COMPILER  = intel
 OPTIMIZE  = yes
-DEBUG     = no
+DEBUG     = yes
 PROFILE   = no
 STATUS    = yes
 PAPI      = no
+MIC       = yes
 
 #===============================================================================
 # Program name & source code list
@@ -29,13 +30,25 @@ obj = $(source:.c=.o)
 # Sets Flags
 #===============================================================================
 
+CFLAGS = -std=gnu99
+
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
   CC = gcc
+  CFLAGS += -fopenmp -ffast-math
 endif
 
-# Standard Flags
-CFLAGS := -fopenmp -std=gnu99 -ffast-math
+# Intel compiler
+ifeq ($(COMPILER),intel)
+  CC = icc
+ifeq ($(MIC),yes)
+  #CFLAGS += -openmp -mmic -vec-report=3 -no-opt-prefetch
+  CFLAGS += -openmp -mmic -vec-report=3
+else
+  CFLAGS += -openmp -vec-report=3
+endif
+
+endif
 
 # Linker Flags
 LDFLAGS = -lm
