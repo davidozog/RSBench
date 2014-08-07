@@ -6,7 +6,7 @@ COMPILER  = intel
 OPTIMIZE  = yes
 DEBUG     = yes
 PROFILE   = no
-STATUS    = yes
+STATUS    = no
 PAPI      = no
 MIC       = yes
 

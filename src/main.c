@@ -207,10 +207,16 @@ int main(int argc, char * argv[])
 	      sigA = E * w.A;
 	      sigF = E * w.F;
 
+        //int idx = data.n_poles[nuc];
+        int idx = input.avg_n_poles*data.n_poles[nuc]-1+w.start;
+        //int idx = data.n_poles[nuc]-1+w.start;
+
         // TODO: This range must be static for astounding performance, possible...?
 	      // Loop over Poles within window, add contributions
-#pragma simd
+//#pragma novector
+#pragma ivdep
 	      for( int i = 0; i < 4; i++ )
+	      //for( int i = w.start; i < w.start+4; i++ )
 	      //for( int i = w.start; i < w.end; i++ )
 	      {
 	      	complex double PSIIKI;
@@ -256,7 +262,11 @@ int main(int argc, char * argv[])
 
           // TODO: Something like this... 1st one seg faults on host
           //int idx = input.avg_n_poles*data.n_poles[nuc] + i;
-          int idx = data.n_poles[nuc] + i;
+          
+          idx += i;
+
+          //int idx = data.n_poles[nuc]+i;
+
 	  	    PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( data.mypoles->MP_EA[idx] - sqrt(E) );
 	  	    CDUM = PSIIKI / E;
 	  	    sigT += creal( data.mypoles->MP_RT[idx] * CDUM * sigTfactors[data.mypoles->l_value[idx]] );
