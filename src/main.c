@@ -170,14 +170,15 @@ int main(int argc, char * argv[])
 			// This method provides a consistent hash accross
 			// architectures and compilers.
 			#ifdef VERIFICATION
+      for( int j = 0; j < 4; j++ )
+        if (macro_xs[j] > 0.0 || macro_xs[j] < 1e-10) macro_xs[j] = 0.0;
 			char line[256];
-			sprintf(line, "%.5lf %d %.5lf %.5lf %.5lf %.5lf %.5lf",
+			sprintf(line, "%.5lf %d %.5lf %.5lf %.5lf %.5lf",
 			       E, mat,
 				   macro_xs[0],
 				   macro_xs[1],
 				   macro_xs[2],
-				   macro_xs[3],
-				   macro_xs[4]);
+				   macro_xs[3]);
 			unsigned long long vhash_local = hash(line, 10000);
 			#pragma omp atomic
 			vhash += vhash_local;
