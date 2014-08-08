@@ -9,7 +9,7 @@ PROFILE  = no
 STATUS   = no
 PAPI     = no
 MIC      = yes
-VERIFY   = yes
+VERIFY   = no
 
 #===============================================================================
 # Program name & source code list
