@@ -6,11 +6,18 @@ int main(int argc, char * argv[])
 	// Initialization & Command Line Read-In
 	// =====================================================================
 
-	int version = 2;
+	int version = 3;
 	int max_procs = omp_get_num_procs();
 	double start, stop;
-
+	unsigned long long vhash = 0;
+	
+  // rand() is only used in the serial initialization stages.
+  // A custom RNG is used in parallel portions.
+  #ifdef VERIFICATION
+  srand(26);
+  #else
 	srand(time(NULL));
+  #endif
 	
 	// Process CLI Fields
 	Input input = read_CLI( argc, argv );
@@ -35,15 +42,22 @@ int main(int argc, char * argv[])
 	
 	start = omp_get_wtime();
 
-  unsigned long long vhash = 0;
-
 	// Allocate & fill energy grids
 	printf("Generating resonance distributions...\n");
+  int *nuc_indexes = (int *) malloc( input.n_nuclides * sizeof(int) );
+  #ifdef VERIFICATION
+	int * n_poles = generate_n_poles_v( input, nuc_indexes );
+  #else
 	int * n_poles = generate_n_poles( input );
+  #endif
 
 	// Allocate & fill Window grids
 	printf("Generating window distributions...\n");
+  #ifdef VERIFICATION
+	int * n_windows = generate_n_windows_v( input );
+  #else
 	int * n_windows = generate_n_windows( input );
+  #endif
 
 	// Get material data
 	printf("Loading Hoogenboom-Martin material data...\n");
@@ -51,23 +65,39 @@ int main(int argc, char * argv[])
 
 	// Prepare full resonance grid
 	printf("Generating resonance parameter grid...\n");
-	Pole ** poles = generate_poles( input, n_poles );
+  //#ifdef VERIFICATION
+	//Pole ** poles = generate_poles_v( input, n_poles );
+  //#else
+	//Pole ** poles = generate_poles( input, n_poles );
+  //#endif
 
+  #ifdef VERIFICATION
+	MIC_Pole mypoles = generate_mypoles_v( input, n_poles, nuc_indexes );
+  #else
 	MIC_Pole mypoles = generate_mypoles( input, n_poles );
+  #endif
 
 	// Prepare full Window grid
 	printf("Generating window parameter grid...\n");
+  #ifdef VERIFICATION
+	Window ** windows = generate_window_params_v( input, n_windows, n_poles);
+  #else
 	Window ** windows = generate_window_params( input, n_windows, n_poles);
+  #endif
 
 	// Prepare 0K Resonances
 	printf("Generating 0K l_value data...\n");
+  #ifdef VERIFICATION
+	double ** pseudo_K0RS = generate_pseudo_K0RS_v( input );
+  #else
 	double ** pseudo_K0RS = generate_pseudo_K0RS( input );
+  #endif
 
 	CalcDataPtrs data;
 	data.n_poles = n_poles;
 	data.n_windows = n_windows;
 	data.materials = materials;
-	data.poles = poles;
+	//data.poles = poles;
 	data.mypoles = &mypoles;
 	data.windows = windows;
 	data.pseudo_K0RS = pseudo_K0RS;
@@ -97,18 +127,18 @@ int main(int argc, char * argv[])
 
 	start = omp_get_wtime();
 
-	unsigned long seed = rand();
+	unsigned long seed;
 	int mat;
 	double E;
 	int i, j;
 
 	#pragma omp parallel default(none) \
 	private(seed, mat, E, i, j) \
-	shared(input, data, vhash) 
+	shared(input, data, nuc_indexes, vhash) 
 	{
 		double macro_xs[4];
 		int thread = omp_get_thread_num();
-		seed += thread;
+    seed = (thread+1)*19+17;
 		
 		#ifdef PAPI
 		int eventset = PAPI_NULL; 
@@ -131,8 +161,18 @@ int main(int argc, char * argv[])
 						(double) input.nthreads )) /
 						(double) input.nthreads * 100.0);
 			#endif
+
+      #ifdef VERIFICATION 
+      #pragma omp critical
+      {
+			mat = pick_mat( &seed );
+			E = rn_v();
+      } 
+      #else
 			mat = pick_mat( &seed );
 			E = rn( &seed );
+      #endif
+
 			//calculate_macro_xs( macro_xs, mat, E, input, data, sigTfactors ); 
 	    // zero out macro vector
 	    for( int i = 0; i < 4; i++ )
@@ -141,12 +181,12 @@ int main(int argc, char * argv[])
       //TODO: notice how "novector" sucks!
       //#pragma novector
       #pragma simd
+      //#pragma ivdep
 	    for( int i = 0; i < (data.materials).num_nucs[mat]; i++ )
 	    //for( int i = 0; i < 16; i++ )
 	    {
 	    	double micro_xs[4];
 	    	int nuc = (data.materials).mats[mat][i];
-        //int nuc = i;
 
 	    	//calculate_micro_xs( micro_xs, nuc, E, input, data, sigTfactors);
 	      // MicroScopic XS's to Calculate
@@ -207,16 +247,12 @@ int main(int argc, char * argv[])
 	      sigA = E * w.A;
 	      sigF = E * w.F;
 
-        //int idx = data.n_poles[nuc];
-        int idx = input.avg_n_poles*data.n_poles[nuc]-1+w.start;
-        //int idx = data.n_poles[nuc]-1+w.start;
+        int idx = nuc_indexes[nuc] + w.start;
 
-        // TODO: This range must be static for astounding performance, possible...?
+        // This range must be "static" for astounding performance...
 	      // Loop over Poles within window, add contributions
-//#pragma novector
-#pragma ivdep
-	      for( int i = 0; i < 4; i++ )
-	      //for( int i = w.start; i < w.start+4; i++ )
+        #pragma simd
+	      for( int i = 0; i < 2; i++ )
 	      //for( int i = w.start; i < w.end; i++ )
 	      {
 	      	complex double PSIIKI;
@@ -265,8 +301,8 @@ int main(int argc, char * argv[])
           
           idx += i;
 
-          //int idx = data.n_poles[nuc]+i;
-
+          //int idx = nuc_indexes[nuc] + i;
+         
 	  	    PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( data.mypoles->MP_EA[idx] - sqrt(E) );
 	  	    CDUM = PSIIKI / E;
 	  	    sigT += creal( data.mypoles->MP_RT[idx] * CDUM * sigTfactors[data.mypoles->l_value[idx]] );
@@ -282,23 +318,25 @@ int main(int argc, char * argv[])
 	      micro_xs[3] = sigE;
 
 	    	for( int j = 0; j < 4; j++ ) {
-	    		macro_xs[j] += micro_xs[j] * 0.8;
-	    		//macro_xs[j] += micro_xs[j] * data.materials.concs[mat][i];
+	    		macro_xs[j] += micro_xs[j] * data.materials.concs[mat][i];
 	    	}
 	    }
 
-      //#pragma omp parallel shared(sum) num_threads(inner)
-      //{
-
-        //#pragma omp for reduction(+:sum)
-        //#pragma novector
-        //for (j=1; j<=input.avg_n_poles; j++) {
-        //  sum += j;
-        //}
-
-      //}
-
-      //printf("sum = %f\n", sum);
+      #ifdef VERIFICATION
+	    for( int j = 0; j < 4; j++ )
+        if (macro_xs[j] > 0.0 || macro_xs[j] < 1e-10) macro_xs[j] = 0.0;
+      char line[256];
+      sprintf(line, "%.5lf %d %.5lf %.5lf %.5lf %.5lf",
+          E, mat,
+          macro_xs[0],
+          macro_xs[1],
+          macro_xs[2],
+          macro_xs[3]);
+      unsigned long long vhash_local = hash(line, 10000);
+      
+      #pragma omp atomic
+      vhash += vhash_local;
+      #endif
 		}
 
 		free(sigTfactors);
@@ -318,20 +356,6 @@ int main(int argc, char * argv[])
 		counter_stop(&eventset, num_papi_events);
 		#endif
     
-#ifdef VERIFY
-    //printf("macro_xs= %f\n", macro_xs[0]);
-    char line[256];
-    sprintf(line, "%.5lf %.5lf %.5lf %.5lf",
-    macro_xs[0],
-    macro_xs[1],
-    macro_xs[2],
-    macro_xs[3]);
-    unsigned long long vhash_local = hash(line, 10000);
-
-    #pragma omp atomic
-    vhash += vhash_local;
-#endif
-
 	}
 
 	stop = omp_get_wtime();
@@ -351,12 +375,12 @@ int main(int argc, char * argv[])
 	printf("Lookups:     "); fancy_int(input.lookups);
 	printf("Lookups/s:   "); fancy_int((double) input.lookups / (stop-start));
 
-	border_print();
-
-#ifdef VERIFY
+#ifdef VERIFICATION
   printf("Verification checksum: %llu\n", vhash);
+  free(nuc_indexes);
 #endif
 
+	border_print();
 
   cleanup(n_poles, n_windows, input, data);
 

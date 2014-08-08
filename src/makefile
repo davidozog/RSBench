@@ -2,13 +2,14 @@
 # User Options
 #===============================================================================
 
-COMPILER  = intel
-OPTIMIZE  = yes
-DEBUG     = yes
-PROFILE   = no
-STATUS    = no
-PAPI      = no
-MIC       = yes
+COMPILER = intel
+OPTIMIZE = yes
+DEBUG    = yes
+PROFILE  = no
+STATUS   = no
+PAPI     = no
+MIC      = yes
+VERIFY   = yes
 
 #===============================================================================
 # Program name & source code list
@@ -41,13 +42,12 @@ endif
 # Intel compiler
 ifeq ($(COMPILER),intel)
   CC = icc
-ifeq ($(MIC),yes)
-  #CFLAGS += -openmp -mmic -vec-report=3 -no-opt-prefetch
-  CFLAGS += -openmp -mmic -vec-report=3
-else
-  CFLAGS += -openmp -vec-report=3
-endif
-
+  ifeq ($(MIC),yes)
+    #CFLAGS += -openmp -mmic -vec-report=3 -no-opt-prefetch
+    CFLAGS += -openmp -mmic -vec-report=3
+  else
+    CFLAGS += -openmp -vec-report=3
+  endif
 endif
 
 # Linker Flags
@@ -80,6 +80,11 @@ ifeq ($(PAPI),yes)
   CFLAGS += -DPAPI
   source += papi.c
   LDFLAGS += -lpapi
+endif
+
+# Verification of results mode
+ifeq ($(VERIFY),yes)
+  CFLAGS += -DVERIFICATION
 endif
 
 #===============================================================================
