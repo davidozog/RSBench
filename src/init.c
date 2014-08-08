@@ -10,7 +10,7 @@ int * generate_n_poles( Input input )
 	for( int i = 0; i < total_resonances; i++ )
 		R[rand() % input.n_nuclides]++;
 
-	// Ensure all nuclides have at least 1 resonance
+	// Ensure all nuclides have at least 1 resonanc
 	for( int i = 0; i < input.n_nuclides; i++ )
 		if( R[i] == 0 )
 			R[i] = 1;
@@ -19,12 +19,12 @@ int * generate_n_poles( Input input )
 	for( int i = 0; i < input.n_nuclides; i++ )
 		printf("R[%d] = %d\n", i, R[i]);
 	*/
-	
+
 	return R;
 }
 
 // Verification version of this function (tighter control over RNG)
-int * generate_n_poles_v( Input input )
+int * generate_n_poles_v( Input input, int *nuc_indexes )
 {
 	int total_resonances = input.avg_n_poles * input.n_nuclides;
 
@@ -33,14 +33,23 @@ int * generate_n_poles_v( Input input )
 	for( int i = 0; i < total_resonances; i++ )
 		R[rand() % input.n_nuclides]++;
 
-	// Ensure all nuclides have at least 1 resonance
+  int idx = 0;
+  nuc_indexes[0] = 0;
+	// Ensure all nuclides have at least 1 resonance and count total poles
 	for( int i = 0; i < input.n_nuclides; i++ )
+  {
 		if( R[i] == 0 )
 			R[i] = 1;
+    if (i < input.n_nuclides-1)
+      nuc_indexes[i+1] = idx + R[i];;
+    idx += R[i];
+  }
 	
 	/* Debug	
 	for( int i = 0; i < input.n_nuclides; i++ )
 		printf("R[%d] = %d\n", i, R[i]);
+	for( int i = 0; i < input.n_nuclides; i++ )
+		printf("nuc_idx[%d] = %d\n", i, nuc_indexes[i]);
 	*/
 	
 	return R;
@@ -92,11 +101,64 @@ int * generate_n_windows_v( Input input )
 }
 
 // 
+MIC_Pole generate_mypoles( Input input, int * n_poles )
+{
+  complex double *mp_eas = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_rts = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_ras = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_rfs = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  short int *l_vals = (short int *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(short int), 64);
+
+  MIC_Pole mpole;
+  mpole.MP_EA = mp_eas;
+  mpole.MP_RT = mp_rts;
+  mpole.MP_RA = mp_ras;
+  mpole.MP_RF = mp_rfs;
+  mpole.l_value = l_vals;
+
+  //printf("here\n");
+
+  return mpole;
+}
+
+MIC_Pole generate_mypoles_v( Input input, int * n_poles, int *nuc_indexes )
+{
+  complex double *mp_eas = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_rts = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_ras = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  complex double *mp_rfs = (complex double *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(complex double), 64);
+  short int *l_vals = (short int *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(short int), 64);
+
+	// fill with data
+  int idx, i, j;
+	for( i = 0; i < input.n_nuclides; i++ ) {
+    idx = nuc_indexes[i];
+		for( j = 0; j < n_poles[i]; j++ )
+		{
+			mp_eas[idx+j] = rn_v() + rn_v() * _Complex_I;
+			mp_rts[idx+j] = rn_v() + rn_v() * _Complex_I;
+			mp_ras[idx+j] = rn_v() + rn_v() * _Complex_I;
+			mp_rfs[idx+j] = rn_v() + rn_v() * _Complex_I;
+			l_vals[idx+j] = rand() % input.numL;
+		}
+  }
+
+  MIC_Pole mpole;
+  mpole.MP_EA = mp_eas;
+  mpole.MP_RT = mp_rts;
+  mpole.MP_RA = mp_ras;
+  mpole.MP_RF = mp_rfs;
+  mpole.l_value = l_vals;
+
+  return mpole;
+}
+
+
 Pole ** generate_poles( Input input, int * n_poles )
 {
 	// Allocating 2D contiguous matrix
-	Pole ** R = (Pole **) malloc( input.n_nuclides * sizeof( Pole *));
-	Pole * contiguous = (Pole *) malloc( input.n_nuclides * input.avg_n_poles * sizeof(Pole));
+	Pole ** R = (Pole **)_mm_malloc( input.n_nuclides * sizeof( Pole *), 64);
+	Pole * contiguous = (Pole *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(Pole), 64);
 
 	int k = 0;
 	for( int i = 0; i < input.n_nuclides; i++ )
@@ -129,8 +191,8 @@ Pole ** generate_poles( Input input, int * n_poles )
 Pole ** generate_poles_v( Input input, int * n_poles )
 {
 	// Allocating 2D contiguous matrix
-	Pole ** R = (Pole **) malloc( input.n_nuclides * sizeof( Pole *));
-	Pole * contiguous = (Pole *) malloc( input.n_nuclides * input.avg_n_poles * sizeof(Pole));
+	Pole ** R = (Pole **)_mm_malloc( input.n_nuclides * sizeof( Pole *), 64);
+	Pole * contiguous = (Pole *)_mm_malloc( input.n_nuclides * input.avg_n_poles * sizeof(Pole), 64);
 
 	int k = 0;
 	for( int i = 0; i < input.n_nuclides; i++ )
@@ -253,4 +315,20 @@ double ** generate_pseudo_K0RS_v( Input input )
 	}
 
 	return R;
+}
+
+void cleanup(int *n_poles, int *n_windows, Input input, CalcDataPtrs data) {
+  free(n_poles);
+  free(n_windows);
+  //_mm_free(data.poles);
+  _mm_free(data.mypoles->MP_EA);
+  _mm_free(data.mypoles->MP_RT);
+  _mm_free(data.mypoles->MP_RA);
+  _mm_free(data.mypoles->MP_RF);
+  _mm_free(data.mypoles->l_value);
+  free(data.materials.num_nucs);
+  free(data.materials.mats);
+  free(data.materials.concs);
+  free(data.windows);
+  free(data.pseudo_K0RS);
 }

@@ -8,7 +8,8 @@ DEBUG    = yes
 PROFILE  = no
 STATUS   = no
 PAPI     = no
-VERIFY   = yes
+MIC      = yes
+VERIFY   = no
 
 #===============================================================================
 # Program name & source code list
@@ -30,7 +31,7 @@ obj = $(source:.c=.o)
 # Sets Flags
 #===============================================================================
 
-CFLAGS := -std=gnu99
+CFLAGS = -std=gnu99
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
@@ -38,10 +39,15 @@ ifeq ($(COMPILER),gnu)
   CFLAGS += -fopenmp -ffast-math
 endif
 
+# Intel compiler
 ifeq ($(COMPILER),intel)
   CC = icc
-  #CFLAGS += -openmp -mmic -vec-report=3
-  CFLAGS += -openmp -vec-report=3
+  ifeq ($(MIC),yes)
+    #CFLAGS += -openmp -mmic -vec-report=3 -no-opt-prefetch
+    CFLAGS += -openmp -mmic -vec-report=3
+  else
+    CFLAGS += -openmp -vec-report=3
+  endif
 endif
 
 # Linker Flags

@@ -41,11 +41,12 @@ int main(int argc, char * argv[])
 	border_print();
 	
 	start = omp_get_wtime();
-	
+
 	// Allocate & fill energy grids
 	printf("Generating resonance distributions...\n");
+  int *nuc_indexes = (int *) malloc( input.n_nuclides * sizeof(int) );
   #ifdef VERIFICATION
-	int * n_poles = generate_n_poles_v( input );
+	int * n_poles = generate_n_poles_v( input, nuc_indexes );
   #else
 	int * n_poles = generate_n_poles( input );
   #endif
@@ -64,10 +65,16 @@ int main(int argc, char * argv[])
 
 	// Prepare full resonance grid
 	printf("Generating resonance parameter grid...\n");
+  //#ifdef VERIFICATION
+	//Pole ** poles = generate_poles_v( input, n_poles );
+  //#else
+	//Pole ** poles = generate_poles( input, n_poles );
+  //#endif
+
   #ifdef VERIFICATION
-	Pole ** poles = generate_poles_v( input, n_poles );
+	MIC_Pole mypoles = generate_mypoles_v( input, n_poles, nuc_indexes );
   #else
-	Pole ** poles = generate_poles( input, n_poles );
+	MIC_Pole mypoles = generate_mypoles( input, n_poles );
   #endif
 
 	// Prepare full Window grid
@@ -90,7 +97,8 @@ int main(int argc, char * argv[])
 	data.n_poles = n_poles;
 	data.n_windows = n_windows;
 	data.materials = materials;
-	data.poles = poles;
+	//data.poles = poles;
+	data.mypoles = &mypoles;
 	data.windows = windows;
 	data.pseudo_K0RS = pseudo_K0RS;
 
@@ -122,11 +130,11 @@ int main(int argc, char * argv[])
 	unsigned long seed;
 	int mat;
 	double E;
-	int i;
+	int i, j;
 
 	#pragma omp parallel default(none) \
-	private(seed, mat, E, i) \
-	shared(input, data, vhash) 
+	private(seed, mat, E, i, j) \
+	shared(input, data, nuc_indexes, vhash) 
 	{
 		double macro_xs[4];
 		int thread = omp_get_thread_num();
@@ -143,7 +151,7 @@ int main(int argc, char * argv[])
 		complex double * sigTfactors =
 			(complex double *) malloc( input.numL * sizeof(complex double) );
 
-		#pragma omp for schedule(dynamic)
+    #pragma omp for schedule(dynamic) private(macro_xs)
 		for( i = 0; i < input.lookups; i++ )
 		{
 			#ifdef STATUS
@@ -164,24 +172,169 @@ int main(int argc, char * argv[])
 			mat = pick_mat( &seed );
 			E = rn( &seed );
       #endif
-			calculate_macro_xs( macro_xs, mat, E, input, data, sigTfactors ); 
 
-			// Verification hash calculation
-			// This method provides a consistent hash accross
-			// architectures and compilers.
-			#ifdef VERIFICATION
-			char line[256];
-			sprintf(line, "%.5lf %d %.5lf %.5lf %.5lf %.5lf %.5lf",
-			       E, mat,
-				   macro_xs[0],
-				   macro_xs[1],
-				   macro_xs[2],
-				   macro_xs[3],
-				   macro_xs[4]);
-			unsigned long long vhash_local = hash(line, 10000);
-			#pragma omp atomic
-			vhash += vhash_local;
-			#endif
+			//calculate_macro_xs( macro_xs, mat, E, input, data, sigTfactors ); 
+	    // zero out macro vector
+	    for( int i = 0; i < 4; i++ )
+	    	macro_xs[i] = 0;
+
+      //TODO: notice how "novector" sucks!
+      //#pragma novector
+      #pragma simd
+      //#pragma ivdep
+	    for( int i = 0; i < (data.materials).num_nucs[mat]; i++ )
+	    //for( int i = 0; i < 16; i++ )
+	    {
+	    	double micro_xs[4];
+	    	int nuc = (data.materials).mats[mat][i];
+
+	    	//calculate_micro_xs( micro_xs, nuc, E, input, data, sigTfactors);
+	      // MicroScopic XS's to Calculate
+	      double sigT;
+	      double sigA;
+	      double sigF;
+	      double sigE;
+
+	      // Calculate Window Index
+	      double spacing = 1.0 / data.n_windows[nuc];
+	      int window = (int) ( E / spacing );
+	      if( window == data.n_windows[nuc] )
+	      	window--;
+
+	      // Calculate sigTfactors
+	      //calculate_sig_T(nuc, E, input, data, sigTfactors );
+	      double phi;
+
+        //TODO: Notice that this loop is a vectorization killer!
+	      //for( int i = 0; i < input.numL; i++ )
+	      //{
+	      //	phi = data.pseudo_K0RS[nuc][i] * sqrt(E);
+
+	      //	if( i == 1 )
+	      //		phi -= - atan( phi );
+	      //	else if( i == 2 )
+	      //		phi -= atan( 3.0 * phi / (3.0 - phi*phi));
+	      //	else if( i == 3 )
+	      //		phi -= atan(phi*(15.0-phi*phi)/(15.0-6.0*phi*phi));
+
+	      //	phi *= 2.0;
+
+	      //	sigTfactors[i] = cos(phi) - sin(phi) * _Complex_I;
+	      //}
+
+	      phi = data.pseudo_K0RS[nuc][0] * sqrt(E);
+	      phi *= 2.0;
+	      sigTfactors[0] = cos(phi) - sin(phi) * _Complex_I;
+
+	      phi = data.pseudo_K0RS[nuc][1] * sqrt(E);
+	      phi -= - atan( phi );
+	      phi *= 2.0;
+	      sigTfactors[1] = cos(phi) - sin(phi) * _Complex_I;
+
+	      phi = data.pseudo_K0RS[nuc][2] * sqrt(E);
+	      phi -= atan( 3.0 * phi / (3.0 - phi*phi));
+	      phi *= 2.0;
+	      sigTfactors[2] = cos(phi) - sin(phi) * _Complex_I;
+
+	      phi = data.pseudo_K0RS[nuc][3] * sqrt(E);
+	      phi -= atan(phi*(15.0-phi*phi)/(15.0-6.0*phi*phi));
+	      phi *= 2.0;
+	      sigTfactors[3] = cos(phi) - sin(phi) * _Complex_I;
+
+	      // Calculate contributions from window "background" (i.e., poles outside window (pre-calculated)
+	      Window w = data.windows[nuc][window];
+	      sigT = E * w.T;
+	      sigA = E * w.A;
+	      sigF = E * w.F;
+
+        int idx = nuc_indexes[nuc] + w.start;
+
+        // TODO: This range must be static for astounding performance, possible...?
+	      // Loop over Poles within window, add contributions
+        #pragma simd
+	      for( int i = 0; i < 2; i++ )
+	      //for( int i = w.start; i < w.end; i++ )
+	      {
+	      	complex double PSIIKI;
+	      	complex double CDUM;
+          //Pole pole;
+          //pole.MP_EA = 0.4;
+	        //pole.MP_RT = 0.3;
+	        //pole.MP_RA = 0.2;
+	        //pole.MP_RF = 0.1;
+	        //pole.l_value = 123;
+
+	      	//Pole pole = data.poles[nuc][i];
+	      	//Pole pole = data.mypoles[nuc];
+          //Pole pole;
+          //pole.MP_EA = data.poles[nuc][i].MP_EA;
+          //pole.MP_RT = data.poles[nuc][i].MP_RT;
+          //pole.MP_RA = data.poles[nuc][i].MP_RA;
+          //pole.MP_RF = data.poles[nuc][i].MP_RF;
+          //pole.l_value = data.poles[nuc][i].l_value;
+
+	      	//PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( pole.MP_EA - sqrt(E) );
+	      	//CDUM = PSIIKI / E;
+	      	//sigT += creal( pole.MP_RT * CDUM * sigTfactors[pole.l_value] );
+	      	//sigA += creal( pole.MP_RA * CDUM);
+	      	//sigF += creal( pole.MP_RF * CDUM);
+
+          //complex double p1 = data.poles[nuc][i].MP_EA;
+          //complex double p2 = data.poles[nuc][i].MP_RT;
+          //complex double p3 = data.poles[nuc][i].MP_RA;
+          //complex double p4 = data.poles[nuc][i].MP_RF;
+          //complex double sT = sigTfactors[data.poles[nuc][i].l_value];
+	  	    //PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( p1 - sqrt(E) );
+	  	    //CDUM = PSIIKI / E;
+	  	    //sigT += creal( p2 * CDUM * sT );
+	  	    //sigA += creal( p3 * CDUM);
+	  	    //sigF += creal( p4 * CDUM);
+
+	  	    //PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( data.poles[nuc][i].MP_EA - sqrt(E) );
+	  	    //CDUM = PSIIKI / E;
+	  	    //sigT += creal( data.poles[nuc][i].MP_RT * CDUM * sigTfactors[data.poles[nuc][i].l_value] );
+	  	    //sigA += creal( data.poles[nuc][i].MP_RA * CDUM);
+	  	    //sigF += creal( data.poles[nuc][i].MP_RF * CDUM);
+
+          // TODO: Something like this... 1st one seg faults on host
+          idx += i;
+          //int idx = nuc_indexes[nuc] + i;
+          //int idx = input.avg_n_poles*data.n_poles[nuc] + i;
+          //int idx = data.n_poles[nuc] + i;
+	  	    PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( data.mypoles->MP_EA[idx] - sqrt(E) );
+	  	    CDUM = PSIIKI / E;
+	  	    sigT += creal( data.mypoles->MP_RT[idx] * CDUM * sigTfactors[data.mypoles->l_value[idx]] );
+	  	    sigA += creal( data.mypoles->MP_RA[idx] * CDUM);
+	  	    sigF += creal( data.mypoles->MP_RF[idx] * CDUM);
+	      }
+
+	      sigE = sigT - sigA;
+
+	      micro_xs[0] = sigT;
+	      micro_xs[1] = sigA;
+	      micro_xs[2] = sigF;
+	      micro_xs[3] = sigE;
+
+	    	for( int j = 0; j < 4; j++ ) {
+	    		macro_xs[j] += micro_xs[j] * data.materials.concs[mat][i];
+	    	}
+	    }
+
+      #ifdef VERIFICATION
+	    for( int j = 0; j < 4; j++ )
+        if (macro_xs[j] > 0.0 || macro_xs[j] < 1e-10) macro_xs[j] = 0.0;
+      char line[256];
+      sprintf(line, "%.5lf %d %.5lf %.5lf %.5lf %.5lf",
+          E, mat,
+          macro_xs[0],
+          macro_xs[1],
+          macro_xs[2],
+          macro_xs[3]);
+      unsigned long long vhash_local = hash(line, 10000);
+      
+      #pragma omp atomic
+      vhash += vhash_local;
+      #endif
 		}
 
 		free(sigTfactors);
@@ -200,13 +353,14 @@ int main(int argc, char * argv[])
 		}
 		counter_stop(&eventset, num_papi_events);
 		#endif
+    
 	}
 
 	stop = omp_get_wtime();
 	#ifndef PAPI
 	printf("\nSimulation Complete.\n");
 	#endif
-
+  
 	// =====================================================================
 	// Print / Save Results and Exit
 	// =====================================================================
@@ -218,12 +372,15 @@ int main(int argc, char * argv[])
 	printf("Runtime:     %.3lf seconds\n", stop-start);
 	printf("Lookups:     "); fancy_int(input.lookups);
 	printf("Lookups/s:   "); fancy_int((double) input.lookups / (stop-start));
-  #ifdef VERIFICATION
-  printf("Verification checksum: %llu\n", vhash);
-  #endif
 
+#ifdef VERIFICATION
+  printf("Verification checksum: %llu\n", vhash);
+  free(nuc_indexes);
+#endif
 
 	border_print();
+
+  cleanup(n_poles, n_windows, input, data);
 
 	return 0;
 }
