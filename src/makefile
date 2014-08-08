@@ -2,12 +2,13 @@
 # User Options
 #===============================================================================
 
-COMPILER  = gnu
-OPTIMIZE  = yes
-DEBUG     = no
-PROFILE   = no
-STATUS    = yes
-PAPI      = no
+COMPILER = intel
+OPTIMIZE = yes
+DEBUG    = yes
+PROFILE  = no
+STATUS   = no
+PAPI     = no
+VERIFY   = yes
 
 #===============================================================================
 # Program name & source code list
@@ -29,13 +30,19 @@ obj = $(source:.c=.o)
 # Sets Flags
 #===============================================================================
 
+CFLAGS := -std=gnu99
+
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
   CC = gcc
+  CFLAGS += -fopenmp -ffast-math
 endif
 
-# Standard Flags
-CFLAGS := -fopenmp -std=gnu99 -ffast-math
+ifeq ($(COMPILER),intel)
+  CC = icc
+  #CFLAGS += -openmp -mmic -vec-report=3
+  CFLAGS += -openmp -vec-report=3
+endif
 
 # Linker Flags
 LDFLAGS = -lm
@@ -67,6 +74,11 @@ ifeq ($(PAPI),yes)
   CFLAGS += -DPAPI
   source += papi.c
   LDFLAGS += -lpapi
+endif
+
+# Verification of results mode
+ifeq ($(VERIFY),yes)
+  CFLAGS += -DVERIFICATION
 endif
 
 #===============================================================================

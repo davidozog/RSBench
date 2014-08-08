@@ -68,21 +68,29 @@ void print_input_summary(Input input);
 
 // init.c
 int * generate_n_poles( Input input );
+int * generate_n_poles_v( Input input );
 int * generate_n_windows( Input input );
+int * generate_n_windows_v( Input input );
 Pole ** generate_poles( Input input, int * n_poles );
+Pole ** generate_poles_v( Input input, int * n_poles );
 Window ** generate_window_params( Input input, int * n_windows, int * n_poles );
+Window ** generate_window_params_v( Input input, int * n_windows, int * n_poles );
 double ** generate_pseudo_K0RS( Input input );
+double ** generate_pseudo_K0RS_v( Input input );
 
 // material.c
 int * load_num_nucs(Input input);
 int ** load_mats( Input input, int * num_nucs );
 double ** load_concs( int * num_nucs );
+double ** load_concs_v( int * num_nucs );
 int pick_mat( unsigned long * seed );
 Materials get_materials(Input input);
 
 // utils.c
 double rn(unsigned long * seed);
+double rn_v();
 size_t get_mem_estimate( Input input );
+unsigned int hash(unsigned char *str, int nbins);
 
 // xs_kernel.c
 void calculate_macro_xs( double * macro_xs, int mat, double E, Input input, CalcDataPtrs data, complex double * sigTfactors ); 
@@ -92,3 +100,4 @@ void calculate_sig_T( int nuc, double E, Input input, CalcDataPtrs data, complex
 // papi.c
 void counter_init( int *eventset, int *num_papi_events );
 void counter_stop( int * eventset, int num_papi_events );
+

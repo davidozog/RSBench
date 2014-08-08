@@ -7,6 +7,11 @@ Materials get_materials(Input input)
 	M.num_nucs = load_num_nucs(input);
 	M.mats = load_mats(input, M.num_nucs);
 	M.concs = load_concs(M.num_nucs);
+#ifdef VERIFICATION
+	M.concs = load_concs_v(M.num_nucs);
+#else
+	M.concs = load_concs(M.num_nucs);
+#endif
 
 	return M;
 }
@@ -128,6 +133,28 @@ double ** load_concs( int * num_nucs )
 	return concs;
 }
 
+// Verification version of this function (tighter control over RNG)
+double ** load_concs_v( int * num_nucs )
+{
+	double ** concs = (double **)malloc( 12 * sizeof( double *) );
+	
+	for( int i = 0; i < 12; i++ )
+		concs[i] = (double *)malloc( num_nucs[i] * sizeof(double) );
+	
+	for( int i = 0; i < 12; i++ )
+		for( int j = 0; j < num_nucs[i]; j++ )
+			concs[i][j] = (double) rn_v() / (double) RAND_MAX;
+
+	// test
+	/*
+	for( int i = 0; i < 12; i++ )
+		for( int j = 0; j < num_nucs[i]; j++ )
+			printf("concs[%d][%d] = %lf\n", i, j, concs[i][j] );
+	*/
+
+	return concs;
+}
+
 // picks a material based on a probabilistic distribution
 int pick_mat( unsigned long * seed )
 {
@@ -153,7 +180,11 @@ int pick_mat( unsigned long * seed )
 	dist[10] = 0.025;	// top of fuel assemblies
 	dist[11] = 0.013;	// bottom of fuel assemblies
 	
-	double roll = rn(seed);
+  #ifdef VERIFICATION
+  double roll = rn_v();
+  #else
+  double roll = rn(seed);
+  #endif
 
 	// makes a pick based on the distro
 	for( int i = 0; i < 12; i++ )
