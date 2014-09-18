@@ -51,17 +51,11 @@ void calculate_micro_xs( double * micro_xs, int nuc, double E, Input input, Calc
 	sigA = E * w.A;
 	sigF = E * w.F;
 
-//  printf("start:end => %d:%d\n", w.start, w.end);
-  //int idx = w.start;
-
 	// Loop over Poles within window, add contributions
-	//for( int i = 0; i < 2; i++ )
-	//for( int i = w.start; i < w.start+4; i++ )
 	for( int i = w.start; i < w.end; i++ )
 	{
 		complex double PSIIKI;
 		complex double CDUM;
-    //idx += i;
     int idx = i;
 		Pole pole = data.poles[nuc][idx];
 		PSIIKI = -(0.0 - 1.0 * _Complex_I ) / ( pole.MP_EA - sqrt(E) );
